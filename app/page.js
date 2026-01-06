@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { generateSensorData } from "@/lib/mockSensor";
 import LineChart from "@/components/LineChart";
 import RadialProgress from "@/components/RadialProgress";
@@ -28,6 +29,28 @@ export default function Dashboard() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 p-6">
       <div className="max-w-7xl mx-auto space-y-8">
+        {/* Navigation */}
+        <nav
+          className={`flex justify-end transition-all duration-1000 ${
+            isLoaded ? "translate-y-0 opacity-100" : "-translate-y-10 opacity-0"
+          }`}
+        >
+          <div className="flex gap-3">
+            <Link
+              href="/"
+              className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg font-medium text-sm shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+            >
+              🌍 Sensors
+            </Link>
+            <Link
+              href="/eps"
+              className="px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg font-medium text-sm border border-zinc-700 hover:bg-zinc-700 hover:text-white transition-all duration-300 hover:scale-105"
+            >
+              ⚡ EPS Board
+            </Link>
+          </div>
+        </nav>
+
         {/* Header */}
         <div
           className={`text-center transition-all duration-1000 ${

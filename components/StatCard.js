@@ -9,6 +9,8 @@ export default function StatCard({
   unit,
   icon,
   color = "#3b82f6",
+  channel,
+  sublabel,
 }) {
   const [displayValue, setDisplayValue] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -86,10 +88,18 @@ export default function StatCard({
         </div>
       )}
 
+      {/* Channel label */}
+      {channel && (
+        <p className="text-xs text-zinc-500 mb-1 font-medium">{channel}</p>
+      )}
+
       {/* Label */}
-      <p className="text-sm text-zinc-400 mb-2 font-medium tracking-wide">
+      <p className="text-sm text-zinc-400 mb-1 font-medium tracking-wide">
         {label}
       </p>
+
+      {/* Sublabel */}
+      {sublabel && <p className="text-xs text-zinc-500 mb-2">{sublabel}</p>}
 
       {/* Value */}
       <div className="flex items-baseline gap-2">
