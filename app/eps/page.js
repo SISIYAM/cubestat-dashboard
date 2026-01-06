@@ -75,6 +75,174 @@ export default function EpsDashboard() {
           </div>
         </div>
 
+        {/* STATUS INDICATORS SECTION */}
+        <div
+          className={`transition-all duration-1000 delay-100 ${
+            isLoaded ? "translate-y-0 opacity-100" : "translate-y-10 opacity-0"
+          }`}
+        >
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-3">
+              <span className="text-purple-400">📊</span>
+              System Status Indicators
+            </h2>
+            <div className="h-1 bg-gradient-to-r from-purple-500 to-pink-400 rounded-full w-56"></div>
+          </div>
+
+          <div className="bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 p-6 rounded-2xl border border-zinc-700/50 shadow-2xl">
+            <div className="flex flex-wrap gap-4 justify-center">
+              {/* Solar Supply Status */}
+              <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 rounded-lg border border-zinc-600/30">
+                <span className="text-sm text-zinc-400">
+                  Solar Supply Status:
+                </span>
+                <span
+                  className={`text-sm font-bold ${
+                    data.solarSupplyStatus === "OK"
+                      ? "text-green-400"
+                      : "text-red-400"
+                  }`}
+                >
+                  {data.solarSupplyStatus}
+                </span>
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    data.solarSupplyStatus === "OK"
+                      ? "bg-green-500"
+                      : "bg-red-500"
+                  } animate-pulse`}
+                ></div>
+              </div>
+
+              {/* Solar Power Path */}
+              <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 rounded-lg border border-zinc-600/30">
+                <span className="text-sm text-zinc-400">Solar Power Path:</span>
+                <span
+                  className={`text-sm font-bold ${
+                    data.solarPowerPath === "ON"
+                      ? "text-green-400"
+                      : "text-red-400"
+                  }`}
+                >
+                  {data.solarPowerPath}
+                </span>
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    data.solarPowerPath === "ON" ? "bg-green-500" : "bg-red-500"
+                  } animate-pulse`}
+                ></div>
+              </div>
+
+              {/* Solar Mode */}
+              <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 rounded-lg border border-zinc-600/30">
+                <span className="text-sm text-zinc-400">Solar Mode:</span>
+                <span className="text-sm font-bold text-yellow-400">
+                  {data.solarMode}
+                </span>
+              </div>
+
+              {/* Input Power Status */}
+              <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 rounded-lg border border-zinc-600/30">
+                <span className="text-sm text-zinc-400">
+                  Input Power Status:
+                </span>
+                <span
+                  className={`text-sm font-bold ${
+                    data.inputPowerStatus === "OK"
+                      ? "text-green-400"
+                      : "text-red-400"
+                  }`}
+                >
+                  {data.inputPowerStatus}
+                </span>
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    data.inputPowerStatus === "OK"
+                      ? "bg-green-500"
+                      : "bg-red-500"
+                  } animate-pulse`}
+                ></div>
+              </div>
+
+              {/* Charger Enable */}
+              <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 rounded-lg border border-zinc-600/30">
+                <span className="text-sm text-zinc-400">Charger Enable:</span>
+                <span
+                  className={`text-sm font-bold ${
+                    data.chargerEnable === "ON"
+                      ? "text-green-400"
+                      : "text-red-400"
+                  }`}
+                >
+                  {data.chargerEnable}
+                </span>
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    data.chargerEnable === "ON" ? "bg-green-500" : "bg-red-500"
+                  } animate-pulse`}
+                ></div>
+              </div>
+
+              {/* Source Mode */}
+              <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 rounded-lg border border-zinc-600/30">
+                <span className="text-sm text-zinc-400">Source Mode:</span>
+                <span className="text-sm font-bold text-cyan-400">
+                  {data.sourceMode}
+                </span>
+              </div>
+
+              {/* Charging Status */}
+              <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 rounded-lg border border-zinc-600/30">
+                <span className="text-sm text-zinc-400">Charging Status:</span>
+                <span
+                  className={`text-sm font-bold ${
+                    data.chargingStatus.includes("charging") &&
+                    !data.chargingStatus.includes("Not")
+                      ? "text-green-400"
+                      : "text-orange-400"
+                  }`}
+                >
+                  {data.chargingStatus}
+                </span>
+              </div>
+
+              {/* STAT1 */}
+              <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 rounded-lg border border-zinc-600/30">
+                <span className="text-sm text-zinc-400">STAT1:</span>
+                <span
+                  className={`text-sm font-bold ${
+                    data.stat1 === "ON" ? "text-green-400" : "text-red-400"
+                  }`}
+                >
+                  {data.stat1}
+                </span>
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    data.stat1 === "ON" ? "bg-green-500" : "bg-red-500"
+                  }`}
+                ></div>
+              </div>
+
+              {/* STAT2 */}
+              <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 rounded-lg border border-zinc-600/30">
+                <span className="text-sm text-zinc-400">STAT2:</span>
+                <span
+                  className={`text-sm font-bold ${
+                    data.stat2 === "ON" ? "text-green-400" : "text-red-400"
+                  }`}
+                >
+                  {data.stat2}
+                </span>
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    data.stat2 === "ON" ? "bg-green-500" : "bg-red-500"
+                  }`}
+                ></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* BATTERY TEMPERATURE SECTION */}
         <div
           className={`transition-all duration-1000 delay-200 ${
