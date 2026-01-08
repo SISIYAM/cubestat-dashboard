@@ -3,9 +3,10 @@ import time
 import re
 from datetime import datetime
 from pymongo import MongoClient
+import copy
 
 # ================= SERIAL CONFIG =================
-PORT = "COM12"                 # CHANGE if needed
+PORT = "COM12"
 BAUDRATE = 115200
 
 # ================= MONGODB CONFIG =================
@@ -14,28 +15,20 @@ DB_NAME = "arduino_logger"
 COLLECTION_NAME = "sensor_readings"
 
 # ================= CONNECT MONGODB =================
-try:
-    mongo_client = MongoClient(MONGO_URI)
-    db = mongo_client[DB_NAME]
-    collection = db[COLLECTION_NAME]
-    print("✅ Connected to MongoDB")
-except Exception as e:
-    print("❌ MongoDB connection failed:", e)
-    exit()
+mongo_client = MongoClient(MONGO_URI)
+db = mongo_client[DB_NAME]
+collection = db[COLLECTION_NAME]
+print("✅ Connected to MongoDB")
 
 # ================= CONNECT SERIAL =================
-try:
-    ser = serial.Serial(PORT, BAUDRATE, timeout=2)
-    time.sleep(2)
-    print(f"✅ Connected to Arduino on {PORT}")
-except serial.SerialException as e:
-    print("❌ Serial connection failed:", e)
-    exit()
+ser = serial.Serial(PORT, BAUDRATE, timeout=1)
+time.sleep(2)
+print(f"✅ Connected to Arduino on {PORT}")
 
 # ================= SNAPSHOT TEMPLATE =================
 def new_snapshot():
     return {
-        "timestamp": datetime.utcnow(),
+        "timestamp": None,
         "battery": {
             "voltage_V": None,
             "soc_percent": None
@@ -55,18 +48,16 @@ def new_snapshot():
     }
 
 snapshot = new_snapshot()
-last_insert_time = time.time()   # ✅ ADD
+last_insert_time = time.time()
 
 # ================= HELPERS =================
 def extract_float(text):
     m = re.search(r"[-+]?\d*\.\d+|\d+", text)
     return float(m.group()) if m else None
 
-
 def extract_charging_status(line):
     m = re.search(r"Charging Status:\s*([^|]+)", line)
     return m.group(1).strip() if m else None
-
 
 # ================= MAIN LOOP =================
 while True:
@@ -84,20 +75,14 @@ while True:
         elif line.startswith("State of Charge"):
             snapshot["battery"]["soc_percent"] = extract_float(line)
 
-        # ---------- ADC Channels ----------
-        elif line.startswith("Channel #"):
-
-            if "NOT CONNECTED" in line:
-                continue
-
+        # ---------- ADC ----------
+        elif line.startswith("Channel #") and "NOT CONNECTED" not in line:
             ch_match = re.search(r"Channel #(\d+)", line)
             val = extract_float(line)
-
             if ch_match and val is not None:
-                ch = int(ch_match.group(1))
-                snapshot["adc"][f"ch_{ch}"] = val
+                snapshot["adc"][f"ch_{int(ch_match.group(1))}"] = val
 
-        # ---------- Solar + Charger ----------
+        # ---------- Solar ----------
         elif line.startswith("Solar Supply Status"):
             snapshot["solar_charger"] = {
                 "solar_supply_ok": "Solar Supply Status: OK" in line,
@@ -111,21 +96,19 @@ while True:
                 "stat2": "STAT2:ON" in line
             }
 
-        # ---------- END OF CYCLE ----------
-        elif "==============================" in line:
-            snapshot["timestamp"] = datetime.utcnow()
-            collection.insert_one(snapshot)
-            print("📦 Inserted document into MongoDB (cycle)\n")
-            snapshot = new_snapshot()
+        # ---------- TIMED INSERT (NO RESET) ----------
+        if time.time() - last_insert_time >= 1:
+            doc = copy.deepcopy(snapshot)
+            doc["timestamp"] = datetime.utcnow()
+
+            collection.insert_one(doc)
+            print("⏱️ Inserted (1 sec snapshot)\n")
+
             last_insert_time = time.time()
 
-        # ---------- 1 SECOND AUTO SAVE ----------
-        if time.time() - last_insert_time >= 1:
-            snapshot["timestamp"] = datetime.utcnow()
-            collection.insert_one(snapshot)
-            print("⏱️ Inserted document into MongoDB (1 sec)\n")
+        # ---------- END OF CYCLE (RESET HERE ONLY) ----------
+        if "==============================" in line:
             snapshot = new_snapshot()
-            last_insert_time = time.time()
 
     except KeyboardInterrupt:
         print("\n🛑 Stopped by user")
