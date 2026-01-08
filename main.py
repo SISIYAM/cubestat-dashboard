@@ -1,9 +1,8 @@
 import serial
 import time
-import re
+import json
 from datetime import datetime
 from pymongo import MongoClient
-import copy
 
 # ================= SERIAL CONFIG =================
 PORT = "COM12"
@@ -25,40 +24,6 @@ ser = serial.Serial(PORT, BAUDRATE, timeout=1)
 time.sleep(2)
 print(f"✅ Connected to Arduino on {PORT}")
 
-# ================= SNAPSHOT TEMPLATE =================
-def new_snapshot():
-    return {
-        "timestamp": None,
-        "battery": {
-            "voltage_V": None,
-            "soc_percent": None
-        },
-        "adc": {},
-        "solar_charger": {
-            "solar_supply_ok": None,
-            "solar_power_path": None,
-            "solar_mode": None,
-            "input_power_ok": None,
-            "charger_enabled": None,
-            "source_mode": None,
-            "charging_status": None,
-            "stat1": None,
-            "stat2": None
-        }
-    }
-
-snapshot = new_snapshot()
-last_insert_time = time.time()
-
-# ================= HELPERS =================
-def extract_float(text):
-    m = re.search(r"[-+]?\d*\.\d+|\d+", text)
-    return float(m.group()) if m else None
-
-def extract_charging_status(line):
-    m = re.search(r"Charging Status:\s*([^|]+)", line)
-    return m.group(1).strip() if m else None
-
 # ================= MAIN LOOP =================
 while True:
     try:
@@ -66,50 +31,31 @@ while True:
         if not line:
             continue
 
-        print(line)
+        # ----- DEBUG: RAW SERIAL -----
+        print("📥 RAW:", line)
 
-        # ---------- Battery ----------
-        if line.startswith("Battery Voltage"):
-            snapshot["battery"]["voltage_V"] = extract_float(line)
+        # ----- PARSE JSON -----
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            print("⚠️ Invalid JSON (skipped)")
+            continue
 
-        elif line.startswith("State of Charge"):
-            snapshot["battery"]["soc_percent"] = extract_float(line)
+        # ----- ADD TIMESTAMP -----
+        data["timestamp"] = datetime.utcnow()
 
-        # ---------- ADC ----------
-        elif line.startswith("Channel #") and "NOT CONNECTED" not in line:
-            ch_match = re.search(r"Channel #(\d+)", line)
-            val = extract_float(line)
-            if ch_match and val is not None:
-                snapshot["adc"][f"ch_{int(ch_match.group(1))}"] = val
+        # ----- INSERT INTO MONGODB -----
+        result = collection.insert_one(data)
 
-        # ---------- Solar ----------
-        elif line.startswith("Solar Supply Status"):
-            snapshot["solar_charger"] = {
-                "solar_supply_ok": "Solar Supply Status: OK" in line,
-                "solar_power_path": "Solar Power Path: ON" in line,
-                "solar_mode": "Solar Mode: AUTO" in line,
-                "input_power_ok": "Input Power Status: OK" in line,
-                "charger_enabled": "Charger Enable: ON" in line,
-                "source_mode": "ADAPTER" if "ADAPTER" in line else "USB",
-                "charging_status": extract_charging_status(line),
-                "stat1": "STAT1:ON" in line,
-                "stat2": "STAT2:ON" in line
-            }
-
-        # ---------- TIMED INSERT (NO RESET) ----------
-        if time.time() - last_insert_time >= 1:
-            doc = copy.deepcopy(snapshot)
-            doc["timestamp"] = datetime.utcnow()
-
-            collection.insert_one(doc)
-            print("⏱️ Inserted (1 sec snapshot)\n")
-
-            last_insert_time = time.time()
-
-        # ---------- END OF CYCLE (RESET HERE ONLY) ----------
-        if "==============================" in line:
-            snapshot = new_snapshot()
+        # ----- CONFIRMATION PRINT -----
+        print("✅ Saved to MongoDB:")
+        print(json.dumps(data, indent=2))
+        print("-" * 50)
 
     except KeyboardInterrupt:
         print("\n🛑 Stopped by user")
         break
+
+    except Exception as e:
+        print("❌ Error:", e)
+        time.sleep(1)
