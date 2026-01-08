@@ -1,8 +1,6 @@
 // components/StatCard.js
 "use client";
 
-import { useEffect, useState } from "react";
-
 export default function StatCard({
   label,
   value,
@@ -12,37 +10,15 @@ export default function StatCard({
   channel,
   sublabel,
 }) {
-  const [displayValue, setDisplayValue] = useState(0);
-  const [isAnimating, setIsAnimating] = useState(false);
-
-  useEffect(() => {
-    setIsAnimating(true);
-    const numericValue = parseFloat(value) || 0;
-    const duration = 1000;
-    const steps = 50;
-    const increment = numericValue / steps;
-    let current = 0;
-    let step = 0;
-
-    const timer = setInterval(() => {
-      step++;
-      current = increment * step;
-
-      if (step >= steps) {
-        setDisplayValue(numericValue);
-        setIsAnimating(false);
-        clearInterval(timer);
-      } else {
-        setDisplayValue(current);
-      }
-    }, duration / steps);
-
-    return () => clearInterval(timer);
-  }, [value]);
-
   const formatValue = (val) => {
+    if (val === "N/A" || val === null || val === undefined) return "N/A";
     if (typeof val === "string") return val;
-    return val % 1 === 0 ? val.toString() : val.toFixed(2);
+    const numVal = parseFloat(val);
+    return isNaN(numVal)
+      ? "N/A"
+      : numVal % 1 === 0
+      ? numVal.toString()
+      : numVal.toFixed(2);
   };
 
   const getStatusColor = () => {
@@ -101,15 +77,10 @@ export default function StatCard({
       {/* Sublabel */}
       {sublabel && <p className="text-xs text-zinc-500 mb-2">{sublabel}</p>}
 
-      {/* Value */}
+      {/* Value - Direct display without animation */}
       <div className="flex items-baseline gap-2">
-        <p
-          className={`text-3xl font-bold transition-all duration-300 ${
-            isAnimating ? "scale-110" : "scale-100"
-          }`}
-          style={{ color: statusColor }}
-        >
-          {formatValue(displayValue)}
+        <p className="text-3xl font-bold" style={{ color: statusColor }}>
+          {formatValue(value)}
         </p>
         {unit && (
           <span className="text-lg text-zinc-500 font-medium">{unit}</span>

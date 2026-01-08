@@ -1,38 +1,145 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { generateEpsSensorData } from "@/lib/mockEpsSensor";
 import LineChart from "@/components/LineChart";
 import StatCard from "@/components/StatCard";
 
 export default function EpsDashboard() {
-  const [data, setData] = useState(generateEpsSensorData());
+  const [data, setData] = useState(null);
   const [cell1TempHist, setCell1TempHist] = useState([]);
   const [cell2TempHist, setCell2TempHist] = useState([]);
   const [cell3TempHist, setCell3TempHist] = useState([]);
   const [cell4TempHist, setCell4TempHist] = useState([]);
   const [epsTempHist, setEpsTempHist] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isLive, setIsLive] = useState(false);
+  const [error, setError] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const lastDataId = useRef(null);
+
+  // Fetch data from API
+  const fetchData = async () => {
+    try {
+      const response = await fetch(
+        "/api/eps-readings?limit=1&sort=-timestamp",
+        {
+          cache: "no-store",
+        }
+      );
+      const result = await response.json();
+
+      if (result.success && result.data.length > 0) {
+        return result.data[0];
+      }
+      return result;
+    } catch (err) {
+      console.error("Error fetching EPS data:", err);
+      setError(err.message);
+      return null;
+    }
+  };
 
   useEffect(() => {
     setIsLoaded(true);
-    const id = setInterval(() => {
-      const d = generateEpsSensorData();
-      setData(d);
-      setCell1TempHist((p) => [...p.slice(-25), d.batteryCell1Temp]);
-      setCell2TempHist((p) => [...p.slice(-25), d.batteryCell2Temp]);
-      setCell3TempHist((p) => [...p.slice(-25), d.batteryCell3Temp]);
-      setCell4TempHist((p) => [...p.slice(-25), d.batteryCell4Temp]);
-      setEpsTempHist((p) => [...p.slice(-25), d.epsBoardTemp]);
+
+    // Initial fetch from API
+    const initData = async () => {
+      const apiData = await fetchData();
+      if (apiData) {
+        setData(apiData);
+        setIsLive(true);
+        setError(null);
+        lastDataId.current = apiData._id;
+        setLastUpdated(new Date());
+      } else {
+        setIsLive(false);
+        setError("Unable to connect to database");
+      }
+    };
+
+    initData();
+
+    // Poll for updates every second
+    const id = setInterval(async () => {
+      const apiData = await fetchData();
+
+      if (apiData) {
+        // Only update if we have new data (different _id or timestamp)
+        const isNewData = lastDataId.current !== apiData._id;
+
+        if (isNewData) {
+          lastDataId.current = apiData._id;
+          setLastUpdated(new Date());
+        }
+
+        setData(apiData);
+        setIsLive(true);
+        setError(null);
+
+        // Update history charts
+        if (apiData.adc) {
+          setCell1TempHist((p) => [...p.slice(-25), apiData.adc.ch_0]);
+          setCell2TempHist((p) => [...p.slice(-25), apiData.adc.ch_1]);
+          setCell3TempHist((p) => [...p.slice(-25), apiData.adc.ch_7]);
+          setCell4TempHist((p) => [...p.slice(-25), apiData.adc.ch_8]);
+          setEpsTempHist((p) => [...p.slice(-25), apiData.adc.ch_6]);
+        }
+      } else {
+        setIsLive(false);
+      }
     }, 1000);
 
     return () => clearInterval(id);
   }, []);
 
+  if (!data) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 p-6 flex items-center justify-center">
+        <div className="text-center">
+          {error ? (
+            <>
+              <div className="text-6xl mb-4">⚠️</div>
+              <p className="text-red-400 text-lg font-medium mb-2">
+                Connection Error
+              </p>
+              <p className="text-zinc-500">{error}</p>
+              <p className="text-zinc-600 text-sm mt-4">
+                Retrying every second...
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="w-16 h-16 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-zinc-400">Connecting to Database...</p>
+            </>
+          )}
+        </div>
+      </main>
+    );
+  }
+
+  // Safe data access with defaults
+  const battery = data.battery || {};
+  const adc = data.adc || {};
+  const solar_charger = data.solar_charger || {};
+
+  // Debug: Log data structure to console
+  console.log("Data from API:", JSON.stringify(data, null, 2));
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 p-6">
       <div className="max-w-7xl mx-auto space-y-8">
+        {/* DEBUG: Show raw data structure */}
+        {/* <div className="bg-zinc-800 p-4 rounded-lg text-xs text-zinc-400 overflow-auto max-h-40">
+          <p className="font-bold text-yellow-400 mb-2">
+            Debug - Raw Data Keys:
+          </p>
+          <pre>{JSON.stringify(Object.keys(data), null, 2)}</pre>
+          <p className="font-bold text-yellow-400 mt-2 mb-2">Full Data:</p>
+          <pre>{JSON.stringify(data, null, 2)}</pre>
+        </div> */}
+
         {/* Navigation */}
         <nav
           className={`flex justify-end transition-all duration-1000 ${
@@ -68,10 +175,73 @@ export default function EpsDashboard() {
             Electrical Power System Monitoring
           </p>
           <div className="flex items-center justify-center gap-2 mt-4">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-            <span className="text-sm text-green-400 font-medium">
-              Live Data Stream
+            <div
+              className={`w-2 h-2 rounded-full ${
+                isLive ? "bg-green-500" : "bg-yellow-500"
+              } animate-pulse`}
+            ></div>
+            <span
+              className={`text-sm font-medium ${
+                isLive ? "text-green-400" : "text-yellow-400"
+              }`}
+            >
+              {isLive
+                ? "Live Data Stream (API)"
+                : "Mock Data (API Unavailable)"}
             </span>
+          </div>
+        </div>
+
+        {/* BATTERY STATUS SECTION */}
+        <div
+          className={`transition-all duration-1000 delay-100 ${
+            isLoaded ? "translate-y-0 opacity-100" : "translate-y-10 opacity-0"
+          }`}
+        >
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-3">
+              <span className="text-green-400">🔋</span>
+              Battery Status
+            </h2>
+            <div className="h-1 bg-gradient-to-r from-green-500 to-emerald-400 rounded-full w-48"></div>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-6">
+            <div className="bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 p-6 rounded-2xl border border-zinc-700/50 shadow-2xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-zinc-400 font-medium">
+                    Battery Voltage
+                  </p>
+                  <p className="text-4xl font-bold text-green-400">
+                    {battery.voltage_V?.toFixed(3) ?? "N/A"} V
+                  </p>
+                </div>
+                <div className="text-4xl">⚡</div>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 p-6 rounded-2xl border border-zinc-700/50 shadow-2xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-zinc-400 font-medium">
+                    State of Charge (SOC)
+                  </p>
+                  <p className="text-4xl font-bold text-emerald-400">
+                    {battery.soc_percent?.toFixed(2) ?? "N/A"} %
+                  </p>
+                </div>
+                <div className="text-4xl">🔋</div>
+              </div>
+              <div className="mt-4 bg-zinc-700 rounded-full h-3 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all duration-500"
+                  style={{
+                    width: `${Math.min(battery.soc_percent || 0, 100)}%`,
+                  }}
+                ></div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -84,7 +254,7 @@ export default function EpsDashboard() {
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-3">
               <span className="text-purple-400">📊</span>
-              System Status Indicators
+              Solar Charger Status
             </h2>
             <div className="h-1 bg-gradient-to-r from-purple-500 to-pink-400 rounded-full w-56"></div>
           </div>
@@ -93,21 +263,19 @@ export default function EpsDashboard() {
             <div className="flex flex-wrap gap-4 justify-center">
               {/* Solar Supply Status */}
               <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 rounded-lg border border-zinc-600/30">
-                <span className="text-sm text-zinc-400">
-                  Solar Supply Status:
-                </span>
+                <span className="text-sm text-zinc-400">Solar Supply:</span>
                 <span
                   className={`text-sm font-bold ${
-                    data.solarSupplyStatus === "OK"
+                    solar_charger.solar_supply_ok
                       ? "text-green-400"
                       : "text-red-400"
                   }`}
                 >
-                  {data.solarSupplyStatus}
+                  {solar_charger.solar_supply_ok ? "OK" : "NOT OK"}
                 </span>
                 <div
                   className={`w-2 h-2 rounded-full ${
-                    data.solarSupplyStatus === "OK"
+                    solar_charger.solar_supply_ok
                       ? "bg-green-500"
                       : "bg-red-500"
                   } animate-pulse`}
@@ -119,16 +287,18 @@ export default function EpsDashboard() {
                 <span className="text-sm text-zinc-400">Solar Power Path:</span>
                 <span
                   className={`text-sm font-bold ${
-                    data.solarPowerPath === "ON"
+                    solar_charger.solar_power_path
                       ? "text-green-400"
                       : "text-red-400"
                   }`}
                 >
-                  {data.solarPowerPath}
+                  {solar_charger.solar_power_path ? "ON" : "OFF"}
                 </span>
                 <div
                   className={`w-2 h-2 rounded-full ${
-                    data.solarPowerPath === "ON" ? "bg-green-500" : "bg-red-500"
+                    solar_charger.solar_power_path
+                      ? "bg-green-500"
+                      : "bg-red-500"
                   } animate-pulse`}
                 ></div>
               </div>
@@ -137,48 +307,46 @@ export default function EpsDashboard() {
               <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 rounded-lg border border-zinc-600/30">
                 <span className="text-sm text-zinc-400">Solar Mode:</span>
                 <span className="text-sm font-bold text-yellow-400">
-                  {data.solarMode}
+                  {solar_charger.solar_mode ? "ON" : "OFF"}
                 </span>
               </div>
 
               {/* Input Power Status */}
               <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 rounded-lg border border-zinc-600/30">
-                <span className="text-sm text-zinc-400">
-                  Input Power Status:
-                </span>
+                <span className="text-sm text-zinc-400">Input Power:</span>
                 <span
                   className={`text-sm font-bold ${
-                    data.inputPowerStatus === "OK"
+                    solar_charger.input_power_ok
                       ? "text-green-400"
                       : "text-red-400"
                   }`}
                 >
-                  {data.inputPowerStatus}
+                  {solar_charger.input_power_ok ? "OK" : "NOT OK"}
                 </span>
                 <div
                   className={`w-2 h-2 rounded-full ${
-                    data.inputPowerStatus === "OK"
-                      ? "bg-green-500"
-                      : "bg-red-500"
+                    solar_charger.input_power_ok ? "bg-green-500" : "bg-red-500"
                   } animate-pulse`}
                 ></div>
               </div>
 
               {/* Charger Enable */}
               <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 rounded-lg border border-zinc-600/30">
-                <span className="text-sm text-zinc-400">Charger Enable:</span>
+                <span className="text-sm text-zinc-400">Charger Enabled:</span>
                 <span
                   className={`text-sm font-bold ${
-                    data.chargerEnable === "ON"
+                    solar_charger.charger_enabled
                       ? "text-green-400"
                       : "text-red-400"
                   }`}
                 >
-                  {data.chargerEnable}
+                  {solar_charger.charger_enabled ? "YES" : "NO"}
                 </span>
                 <div
                   className={`w-2 h-2 rounded-full ${
-                    data.chargerEnable === "ON" ? "bg-green-500" : "bg-red-500"
+                    solar_charger.charger_enabled
+                      ? "bg-green-500"
+                      : "bg-red-500"
                   } animate-pulse`}
                 ></div>
               </div>
@@ -187,7 +355,7 @@ export default function EpsDashboard() {
               <div className="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 rounded-lg border border-zinc-600/30">
                 <span className="text-sm text-zinc-400">Source Mode:</span>
                 <span className="text-sm font-bold text-cyan-400">
-                  {data.sourceMode}
+                  {solar_charger.source_mode || "N/A"}
                 </span>
               </div>
 
@@ -196,13 +364,13 @@ export default function EpsDashboard() {
                 <span className="text-sm text-zinc-400">Charging Status:</span>
                 <span
                   className={`text-sm font-bold ${
-                    data.chargingStatus.includes("charging") &&
-                    !data.chargingStatus.includes("Not")
+                    solar_charger.charging_status?.includes("charging") &&
+                    !solar_charger.charging_status?.includes("Not")
                       ? "text-green-400"
                       : "text-orange-400"
                   }`}
                 >
-                  {data.chargingStatus}
+                  {solar_charger.charging_status || "N/A"}
                 </span>
               </div>
 
@@ -211,14 +379,14 @@ export default function EpsDashboard() {
                 <span className="text-sm text-zinc-400">STAT1:</span>
                 <span
                   className={`text-sm font-bold ${
-                    data.stat1 === "ON" ? "text-green-400" : "text-red-400"
+                    solar_charger.stat1 ? "text-green-400" : "text-red-400"
                   }`}
                 >
-                  {data.stat1}
+                  {solar_charger.stat1 ? "ON" : "OFF"}
                 </span>
                 <div
                   className={`w-2 h-2 rounded-full ${
-                    data.stat1 === "ON" ? "bg-green-500" : "bg-red-500"
+                    solar_charger.stat1 ? "bg-green-500" : "bg-red-500"
                   }`}
                 ></div>
               </div>
@@ -228,21 +396,20 @@ export default function EpsDashboard() {
                 <span className="text-sm text-zinc-400">STAT2:</span>
                 <span
                   className={`text-sm font-bold ${
-                    data.stat2 === "ON" ? "text-green-400" : "text-red-400"
+                    solar_charger.stat2 ? "text-green-400" : "text-red-400"
                   }`}
                 >
-                  {data.stat2}
+                  {solar_charger.stat2 ? "ON" : "OFF"}
                 </span>
                 <div
                   className={`w-2 h-2 rounded-full ${
-                    data.stat2 === "ON" ? "bg-green-500" : "bg-red-500"
+                    solar_charger.stat2 ? "bg-green-500" : "bg-red-500"
                   }`}
                 ></div>
               </div>
             </div>
           </div>
         </div>
-
         {/* BATTERY TEMPERATURE SECTION */}
         <div
           className={`transition-all duration-1000 delay-200 ${
@@ -252,7 +419,7 @@ export default function EpsDashboard() {
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-3">
               <span className="text-orange-400">🔋</span>
-              Battery Cell Temperatures
+              Battery Cell Temperatures (ADC)
             </h2>
             <div className="h-1 bg-gradient-to-r from-orange-500 to-red-400 rounded-full w-64"></div>
           </div>
@@ -263,13 +430,13 @@ export default function EpsDashboard() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-xs text-zinc-500 font-medium mb-1">
-                    Channel 0
+                    ADC Channel 0
                   </p>
                   <p className="text-sm text-zinc-400 font-medium">
                     Battery Cell 1 Temperature
                   </p>
                   <p className="text-3xl font-bold text-orange-400">
-                    {data.batteryCell1Temp.toFixed(2)} °C
+                    {adc.ch_0?.toFixed(2) ?? "N/A"} °C
                   </p>
                 </div>
                 <div className="text-2xl">🔋</div>
@@ -290,13 +457,13 @@ export default function EpsDashboard() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-xs text-zinc-500 font-medium mb-1">
-                    Channel 1
+                    ADC Channel 1
                   </p>
                   <p className="text-sm text-zinc-400 font-medium">
                     Battery Cell 2 Temperature
                   </p>
                   <p className="text-3xl font-bold text-amber-400">
-                    {data.batteryCell2Temp.toFixed(2)} °C
+                    {adc.ch_1?.toFixed(2) ?? "N/A"} °C
                   </p>
                 </div>
                 <div className="text-2xl">🔋</div>
@@ -317,13 +484,13 @@ export default function EpsDashboard() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-xs text-zinc-500 font-medium mb-1">
-                    Channel 7
+                    ADC Channel 7
                   </p>
                   <p className="text-sm text-zinc-400 font-medium">
                     Battery Cell 3 Temperature
                   </p>
                   <p className="text-3xl font-bold text-yellow-400">
-                    {data.batteryCell3Temp.toFixed(2)} °C
+                    {adc.ch_7?.toFixed(2) ?? "N/A"} °C
                   </p>
                 </div>
                 <div className="text-2xl">🔋</div>
@@ -344,13 +511,13 @@ export default function EpsDashboard() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-xs text-zinc-500 font-medium mb-1">
-                    Channel 8
+                    ADC Channel 8
                   </p>
                   <p className="text-sm text-zinc-400 font-medium">
                     Battery Cell 4 Temperature
                   </p>
                   <p className="text-3xl font-bold text-red-400">
-                    {data.batteryCell4Temp.toFixed(2)} °C
+                    {adc.ch_8?.toFixed(2) ?? "N/A"} °C
                   </p>
                 </div>
                 <div className="text-2xl">🔋</div>
@@ -367,7 +534,6 @@ export default function EpsDashboard() {
             </div>
           </div>
         </div>
-
         {/* EPS BOARD TEMPERATURE SECTION */}
         <div
           className={`transition-all duration-1000 delay-300 ${
@@ -388,13 +554,13 @@ export default function EpsDashboard() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-xs text-zinc-500 font-medium mb-1">
-                    Channel 6
+                    ADC Channel 6
                   </p>
                   <p className="text-sm text-zinc-400 font-medium">
                     EPS Board Temperature
                   </p>
                   <p className="text-3xl font-bold text-cyan-400">
-                    {data.epsBoardTemp.toFixed(2)} °C
+                    {adc.ch_6?.toFixed(2) ?? "N/A"} °C
                   </p>
                 </div>
                 <div className="text-2xl">🌡️</div>
@@ -421,7 +587,7 @@ export default function EpsDashboard() {
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-3">
               <span className="text-yellow-400">☀️</span>
-              Solar Panel Currents
+              Solar Panel Currents (ADC)
             </h2>
             <div className="h-1 bg-gradient-to-r from-yellow-500 to-orange-400 rounded-full w-52"></div>
           </div>
@@ -429,35 +595,35 @@ export default function EpsDashboard() {
           <div className="grid lg:grid-cols-4 gap-6">
             <StatCard
               label="Solar Panel X+ Current"
-              value={data.solarXPlusCurrent.toFixed(2)}
+              value={adc.ch_2?.toFixed(2) ?? "N/A"}
               unit="mA"
               icon="☀️"
               color="#facc15"
-              channel="Channel 2"
+              channel="ADC Ch 2"
             />
             <StatCard
               label="Solar Panel X− Current"
-              value={data.solarXMinusCurrent.toFixed(2)}
+              value={adc.ch_3?.toFixed(2) ?? "N/A"}
               unit="mA"
               icon="☀️"
               color="#f59e0b"
-              channel="Channel 3"
+              channel="ADC Ch 3"
             />
             <StatCard
               label="Solar Panel Y+ Current"
-              value={data.solarYPlusCurrent.toFixed(2)}
+              value={adc.ch_4?.toFixed(2) ?? "N/A"}
               unit="mA"
               icon="☀️"
               color="#fbbf24"
-              channel="Channel 4"
+              channel="ADC Ch 4"
             />
             <StatCard
               label="Solar Panel Y− Current"
-              value={data.solarYMinusCurrent.toFixed(2)}
+              value={adc.ch_5?.toFixed(2) ?? "N/A"}
               unit="mA"
               icon="☀️"
               color="#f97316"
-              channel="Channel 5"
+              channel="ADC Ch 5"
             />
           </div>
         </div>
@@ -471,7 +637,7 @@ export default function EpsDashboard() {
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-3">
               <span className="text-green-400">⚡</span>
-              System Currents
+              System Currents (ADC)
             </h2>
             <div className="h-1 bg-gradient-to-r from-green-500 to-emerald-400 rounded-full w-48"></div>
           </div>
@@ -479,28 +645,28 @@ export default function EpsDashboard() {
           <div className="grid lg:grid-cols-3 gap-6">
             <StatCard
               label="System Load Current"
-              value={data.systemLoadCurrent.toFixed(2)}
+              value={adc.ch_13?.toFixed(2) ?? "N/A"}
               unit="mA"
               icon="🔌"
               color="#22c55e"
-              channel="Channel 13"
+              channel="ADC Ch 13"
               sublabel="OBC + Payload + Aux"
             />
             <StatCard
               label="Battery Charging Current"
-              value={data.batteryChargingCurrent.toFixed(2)}
+              value={adc.ch_14?.toFixed(2) ?? "N/A"}
               unit="mA"
               icon="🔋"
               color="#10b981"
-              channel="Channel 14"
+              channel="ADC Ch 14"
             />
             <StatCard
               label="Comm Subsystem Current"
-              value={data.commSubsystemCurrent.toFixed(2)}
+              value={adc.ch_15?.toFixed(2) ?? "N/A"}
               unit="mA"
               icon="📡"
               color="#14b8a6"
-              channel="Channel 15"
+              channel="ADC Ch 15"
             />
           </div>
         </div>
@@ -512,10 +678,28 @@ export default function EpsDashboard() {
           }`}
         >
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-800/50 rounded-full border border-zinc-700/50">
-            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+            <div
+              className={`w-2 h-2 rounded-full ${
+                isLive ? "bg-green-500" : "bg-red-500"
+              } animate-pulse`}
+            ></div>
             <span className="text-sm text-zinc-400">
-              Data updates every second
+              {isLive
+                ? "Connected to MongoDB - Live data stream"
+                : "Disconnected - Attempting to reconnect..."}
             </span>
+          </div>
+          <div className="mt-2 space-y-1">
+            {data.timestamp && (
+              <p className="text-xs text-zinc-500">
+                Sensor Timestamp: {new Date(data.timestamp).toLocaleString()}
+              </p>
+            )}
+            {lastUpdated && (
+              <p className="text-xs text-zinc-600">
+                Last Updated: {lastUpdated.toLocaleTimeString()}
+              </p>
+            )}
           </div>
         </div>
       </div>
