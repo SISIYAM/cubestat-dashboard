@@ -55,6 +55,7 @@ def new_snapshot():
     }
 
 snapshot = new_snapshot()
+last_insert_time = time.time()   # ✅ ADD
 
 # ================= HELPERS =================
 def extract_float(text):
@@ -114,8 +115,17 @@ while True:
         elif "==============================" in line:
             snapshot["timestamp"] = datetime.utcnow()
             collection.insert_one(snapshot)
-            print("📦 Inserted document into MongoDB\n")
+            print("📦 Inserted document into MongoDB (cycle)\n")
             snapshot = new_snapshot()
+            last_insert_time = time.time()
+
+        # ---------- 1 SECOND AUTO SAVE ----------
+        if time.time() - last_insert_time >= 1:
+            snapshot["timestamp"] = datetime.utcnow()
+            collection.insert_one(snapshot)
+            print("⏱️ Inserted document into MongoDB (1 sec)\n")
+            snapshot = new_snapshot()
+            last_insert_time = time.time()
 
     except KeyboardInterrupt:
         print("\n🛑 Stopped by user")
