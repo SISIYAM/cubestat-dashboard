@@ -235,16 +235,58 @@ void ADCread(uint16_t channel, uint8_t* rtrnChnl, float *rtrnVolt) {
 }
 
 float ADCconvert(uint8_t channel, float voltage) {
-  if ((channel >= 2 && channel <= 5) || (channel >= 13 && channel <= 15)) {
+
+  // ---------- CURRENT CHANNELS ----------
+  if (((channel >= 2) && (channel <= 5)) || ((channel >= 13) && (channel <= 15))) {
     float Vsense = voltage / 50.0;
-    return (channel >= 13) ? (Vsense / 0.033) : (Vsense / 0.43);
+    if (channel >= 13)
+      return Vsense / 0.033;      // 33 mΩ
+    else
+      return Vsense / 0.43;       // 430 mΩ
   }
 
-  else if (channel == 0 || channel == 1 || channel == 7 || channel == 8 || channel == 6) {
+  // ---------- BATTERY TEMPERATURE (ch0,1,7,8) ----------
+  else if ((channel == 0) || (channel == 1) || (channel == 7) || (channel == 8)) {
+
     voltage /= 1000.0;
-    float Rsense = ((3.3 / voltage) - 1) * 10000.0;
-    return log(Rsense / 10.0);
+    float Rsense = ((3.3 / voltage) - 1.0) * 10000.0;
+    Rsense /= 1000.0;   // convert to kΩ
+
+    float Temp = NAN;
+
+    if (Rsense >= 53.41 && Rsense <= 329.5)
+      Temp = log(Rsense / 23.869) / (-0.052);
+    else if (Rsense >= 10 && Rsense < 53.41)
+      Temp = log(Rsense / 27.52) / (-0.041);
+    else if (Rsense >= 2.588 && Rsense < 10)
+      Temp = log(Rsense / 22.238) / (-0.033);
+    else if (Rsense >= 0.7576 && Rsense < 2.588)
+      Temp = log(Rsense / 14.481) / (-0.027);
+
+    return Temp;
+  }
+
+  // ---------- BOARD TEMPERATURE (ch6) ----------
+  else if (channel == 6) {
+
+    voltage /= 1000.0;
+    float Rsense = ((3.3 / voltage) - 1.0) * 10000.0;
+    Rsense /= 10000.0; // convert to tens of kΩ
+
+    float Temp = NAN;
+
+    if (Rsense >= 2.764 && Rsense < 20.52)
+      Temp = log(Rsense / 2.6602) / (-0.05);
+    else if (Rsense >= 0.5828 && Rsense < 2.764)
+      Temp = log(Rsense / 2.725) / (-0.039);
+    else if (Rsense >= 0.1672 && Rsense < 0.5828)
+      Temp = log(Rsense / 1.9928) / (-0.031);
+    else if (Rsense >= 0.04986 && Rsense < 0.1672)
+      Temp = log(Rsense / 1.4248) / (-0.027);
+
+    return Temp;
   }
 
   return NAN;
 }
+
