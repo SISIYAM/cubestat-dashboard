@@ -18,6 +18,8 @@ export default function EpsDashboard() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const lastDataId = useRef(null);
 
+  const [solarPowerPath, setSolarPowerPath] = useState(false);
+  const [solarCmdSending, setSolarCmdSending] = useState(false);
   // Fetch data from API
   const fetchData = async () => {
     try {
@@ -92,6 +94,35 @@ export default function EpsDashboard() {
 
     return () => clearInterval(id);
   }, []);
+
+  // Keep local toggle state in sync with incoming data
+  useEffect(() => {
+    if (data && data.solar_charger) {
+      setSolarPowerPath(!!data.solar_charger.solar_power_path);
+    }
+  }, [data]);
+
+  // Send command to local solar API
+  const sendSolarCommand = async (command) => {
+    try {
+      setSolarCmdSending(true);
+      await fetch("http://localhost:5000/solar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command }),
+      });
+      setSolarPowerPath(command === "1");
+    } catch (err) {
+      console.error("Error sending solar command:", err);
+    } finally {
+      setSolarCmdSending(false);
+    }
+  };
+
+  const handleToggleSolar = () => {
+    const cmd = solarPowerPath ? "0" : "1";
+    sendSolarCommand(cmd);
+  };
 
   if (!data) {
     return (
@@ -301,6 +332,21 @@ export default function EpsDashboard() {
                       : "bg-red-500"
                   } animate-pulse`}
                 ></div>
+                <button
+                  onClick={handleToggleSolar}
+                  disabled={solarCmdSending}
+                  className={`ml-3 px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${
+                    solarPowerPath
+                      ? "bg-green-600 text-white"
+                      : "bg-red-600 text-white"
+                  }`}
+                >
+                  {solarCmdSending
+                    ? "..."
+                    : solarPowerPath
+                    ? "Turn Off"
+                    : "Turn On"}
+                </button>
               </div>
 
               {/* Solar Mode */}

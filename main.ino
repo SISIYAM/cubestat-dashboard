@@ -111,6 +111,24 @@ void setup() {
    ============================================================ */
 void loop() {
 
+    /* ---------- SERIAL MANUAL SOLAR CONTROL ---------- */
+  if (Serial.available() > 0) {
+    char c = Serial.read();
+
+    if (c == '1') {
+      solarAutoMode = false;
+      solarPowerPath = true;
+      digitalWrite(PIN_EN_SOLAR, HIGH);
+    }
+    else if (c == '0') {
+      solarAutoMode = false;
+      solarPowerPath = false;
+      digitalWrite(PIN_EN_SOLAR, LOW);
+    }
+  }
+
+
+
   /* ---------- BATTERY ---------- */
   float voltage = readVoltage();
   float soc     = readSOC();
